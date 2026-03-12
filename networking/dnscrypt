@@ -1,0 +1,400 @@
+# DNSCrypt-Proxy 设置指南
+
+## 什么是 DNSCrypt？
+
+DNSCrypt 是一个加密 DNS 查询的协议，防止 DNS 劫持、监听和篡改。
+
+## 安装 DNSCrypt-Proxy
+
+### openSUSE
+```bash
+# 安装
+sudo zypper install dnscrypt-proxy
+
+# 检查版本
+dnscrypt-proxy -version
+```
+
+### 从源码安装（最新版）
+```bash
+# 下载最新版本
+cd /tmp
+wget https://github.com/DNSCrypt/dnscrypt-proxy/releases/download/2.1.5/dnscrypt-proxy-linux_x86_64-2.1.5.tar.gz
+
+# 解压
+tar -xvf dnscrypt-proxy-linux_x86_64-2.1.5.tar.gz
+
+# 移动到系统目录
+sudo mv linux-x86_64 /opt/dnscrypt-proxy
+
+# 进入目录
+cd /opt/dnscrypt-proxy
+```
+
+## 基本配置
+
+### 配置文件位置
+```bash
+# 系统安装
+/etc/dnscrypt-proxy/dnscrypt-proxy.toml
+
+# 手动安装
+/opt/dnscrypt-proxy/dnscrypt-proxy.toml
+```
+
+### 编辑配置文件
+```bash
+sudo nano /etc/dnscrypt-proxy/dnscrypt-proxy.toml
+```
+
+### 基本配置示例
+```toml
+##############################################
+# 监听地址
+##############################################
+
+listen_addresses = ['127.0.0.1:53', '[::1]:53']
+
+# 如果要让局域网其他设备使用，改为：
+# listen_addresses = ['0.0.0.0:53']
+
+##############################################
+# 服务器选择
+##############################################
+
+# 最大服务器数量
+server_names = ['cloudflare', 'google', 'quad9-dnscrypt-ip4-filter-pri']
+
+# 或者留空让 DNSCrypt 自动选择最快的
+# server_names = []
+
+##############################################
+# 协议支持
+##############################################
+
+# 启用 DNSCrypt
+dnscrypt_servers = true
+
+# 启用 DNS-over-HTTPS (DoH)
+doh_servers = true
+
+# 启用 DNS-over-TLS (DoT)
+# dot_servers = true
+
+##############################################
+# IPv4/IPv6
+##############################################
+
+ipv4_servers = true
+ipv6_servers = false
+
+##############################################
+# 日志
+##############################################
+
+# 查询日志
+[query_log]
+file = '/var/log/dnscrypt-proxy/query.log'
+format = 'tsv'
+
+# 可疑查询日志
+[nx_log]
+file = '/var/log/dnscrypt-proxy/nx.log'
+format = 'tsv'
+
+##############################################
+# 缓存
+##############################################
+
+cache = true
+cache_size = 4096
+cache_min_ttl = 2400
+cache_max_ttl = 86400
+cache_neg_min_ttl = 60
+cache_neg_max_ttl = 600
+
+##############################################
+# 过滤
+##############################################
+
+# 阻止恶意域名
+block_ipv6 = false
+
+# 广告过滤（可选）
+[blocked_names]
+blocked_names_file = '/etc/dnscrypt-proxy/blocked-names.txt'
+
+# IP 黑名单
+[blocked_ips]
+blocked_ips_file = '/etc/dnscrypt-proxy/blocked-ips.txt'
+```
+
+### 创建日志目录
+```bash
+sudo mkdir -p /var/log/dnscrypt-proxy
+sudo chown dnscrypt-proxy:dnscrypt-proxy /var/log/dnscrypt-proxy
+```
+
+## 查看可用服务器
+```bash
+# 列出所有可用的 DNSCrypt 服务器
+dnscrypt-proxy -list
+
+# 列出支持 DNSSEC 的服务器
+dnscrypt-proxy -list | grep dnssec
+
+# 列出无日志服务器
+dnscrypt-proxy -list | grep nolog
+
+# 测试配置文件
+sudo dnscrypt-proxy -config /etc/dnscrypt-proxy/dnscrypt-proxy.toml -check
+```
+
+## 推荐的服务器
+```toml
+# 配置文件中的 server_names 可以选择：
+
+# Cloudflare (快速、隐私友好)
+server_names = ['cloudflare', 'cloudflare-ipv6']
+
+# Google (可靠)
+server_names = ['google', 'google-ipv6']
+
+# Quad9 (安全，过滤恶意网站)
+server_names = ['quad9-dnscrypt-ip4-filter-pri', 'quad9-dnscrypt-ip4-nofilter-pri']
+
+# 混合使用（推荐）
+server_names = ['cloudflare', 'google', 'quad9-dnscrypt-ip4-filter-pri']
+```
+
+## 启动 DNSCrypt-Proxy
+```bash
+# 启动服务
+sudo systemctl start dnscrypt-proxy
+
+# 开机自启
+sudo systemctl enable dnscrypt-proxy
+
+# 查看状态
+sudo systemctl status dnscrypt-proxy
+
+# 重启服务
+sudo systemctl restart dnscrypt-proxy
+
+# 查看日志
+sudo journalctl -u dnscrypt-proxy -f
+```
+
+## 配置系统使用 DNSCrypt
+
+### 方法1：直接修改 resolv.conf（临时）
+```bash
+# 备份原文件
+sudo cp /etc/resolv.conf /etc/resolv.conf.backup
+
+# 修改为使用本地 DNSCrypt
+echo "nameserver 127.0.0.1" | sudo tee /etc/resolv.conf
+```
+
+### 方法2：使用 NetworkManager（推荐）
+```bash
+# 通过 nmcli
+sudo nmcli connection modify "连接名" ipv4.dns "127.0.0.1"
+sudo nmcli connection modify "连接名" ipv4.ignore-auto-dns yes
+sudo nmcli connection down "连接名"
+sudo nmcli connection up "连接名"
+```
+
+### 方法3：使用 netconfig (openSUSE)
+```bash
+# 编辑配置
+sudo nano /etc/sysconfig/network/config
+
+# 修改：
+NETCONFIG_DNS_STATIC_SERVERS="127.0.0.1"
+NETCONFIG_DNS_FORWARDER="bind"
+
+# 应用
+sudo netconfig update -f
+```
+
+## 测试 DNSCrypt
+```bash
+# 测试 DNS 解析
+nslookup google.com 127.0.0.1
+
+# 使用 dig 测试
+dig @127.0.0.1 google.com
+
+# 测试 DNSSEC
+dig @127.0.0.1 +dnssec google.com
+
+# 查看查询日志
+sudo tail -f /var/log/dnscrypt-proxy/query.log
+
+# 验证是否使用加密 DNS
+# 访问：https://www.dnsleaktest.com/
+# 或：https://dnsleak.com/
+```
+
+## 广告过滤设置
+
+### 创建广告黑名单
+```bash
+# 创建黑名单文件
+sudo nano /etc/dnscrypt-proxy/blocked-names.txt
+```
+
+添加内容：
+```
+# 广告域名
+doubleclick.net
+googlesyndication.com
+googleadservices.com
+facebook.com
+analytics.google.com
+
+# 跟踪域名
+google-analytics.com
+googletagmanager.com
+
+# 恶意软件
+*.malware.com
+```
+
+### 使用现成的黑名单
+```bash
+# 下载 Steven Black 的黑名单
+cd /etc/dnscrypt-proxy/
+sudo wget https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts -O blocked-names.txt
+
+# 或使用 AdAway 黑名单
+sudo wget https://adaway.org/hosts.txt -O blocked-names.txt
+
+# 重启服务
+sudo systemctl restart dnscrypt-proxy
+```
+
+## 性能优化
+```bash
+# 在配置文件中调整：
+
+# 增加缓存大小
+cache_size = 8192
+
+# 调整 TTL
+cache_min_ttl = 3600
+cache_max_ttl = 86400
+
+# 启用预取
+# [cache]
+# prefetch = true
+
+# 减少超时时间
+timeout = 2500
+```
+
+## 故障排查
+```bash
+# 检查服务状态
+sudo systemctl status dnscrypt-proxy
+
+# 查看详细日志
+sudo journalctl -u dnscrypt-proxy -n 100
+
+# 测试配置文件
+sudo dnscrypt-proxy -config /etc/dnscrypt-proxy/dnscrypt-proxy.toml -check
+
+# 检查端口占用
+sudo ss -tulpn | grep :53
+
+# 如果端口被占用（systemd-resolved）
+sudo systemctl stop systemd-resolved
+sudo systemctl disable systemd-resolved
+
+# 手动运行（调试模式）
+sudo dnscrypt-proxy -config /etc/dnscrypt-proxy/dnscrypt-proxy.toml
+
+# 验证 DNS 查询
+dig @127.0.0.1 google.com
+```
+
+## 与防火墙配合
+```bash
+# 允许 DNS 流量
+sudo firewall-cmd --add-service=dns --permanent
+
+# 如果需要局域网访问
+sudo firewall-cmd --add-port=53/udp --permanent
+sudo firewall-cmd --add-port=53/tcp --permanent
+sudo firewall-cmd --reload
+```
+
+## 卸载
+```bash
+# 停止服务
+sudo systemctl stop dnscrypt-proxy
+sudo systemctl disable dnscrypt-proxy
+
+# 恢复 DNS 设置
+sudo cp /etc/resolv.conf.backup /etc/resolv.conf
+
+# 卸载
+sudo zypper remove dnscrypt-proxy
+
+# 或删除手动安装
+sudo rm -rf /opt/dnscrypt-proxy
+```
+
+## 配置示例文件（完整）
+```toml
+listen_addresses = ['127.0.0.1:53']
+max_clients = 250
+ipv4_servers = true
+ipv6_servers = false
+dnscrypt_servers = true
+doh_servers = true
+require_dnssec = false
+require_nolog = true
+require_nofilter = false
+force_tcp = false
+timeout = 2500
+keepalive = 30
+cert_refresh_delay = 240
+fallback_resolver = '1.1.1.1:53'
+ignore_system_dns = true
+netprobe_timeout = 60
+log_files_max_size = 10
+log_files_max_age = 7
+log_files_max_backups = 1
+
+server_names = ['cloudflare', 'google']
+
+[query_log]
+file = '/var/log/dnscrypt-proxy/query.log'
+format = 'tsv'
+
+[nx_log]
+file = '/var/log/dnscrypt-proxy/nx.log'
+format = 'tsv'
+
+[sources]
+  [sources.'public-resolvers']
+  urls = ['https://raw.githubusercontent.com/DNSCrypt/dnscrypt-resolvers/master/v3/public-resolvers.md']
+  cache_file = '/var/cache/dnscrypt-proxy/public-resolvers.md'
+  minisign_key = 'RWQf6LRCGA9i53mlYecO4IzT51TGPpvWucNSCh1CBM0QTaLn73Y7GFO3'
+  refresh_delay = 72
+
+[blocked_names]
+blocked_names_file = '/etc/dnscrypt-proxy/blocked-names.txt'
+log_file = '/var/log/dnscrypt-proxy/blocked.log'
+```
+
+## 笔记
+
+- DNSCrypt 加密 DNS 查询，防止中间人攻击
+- 支持 DNSCrypt、DoH (DNS-over-HTTPS)、DoT (DNS-over-TLS)
+- 可以配合广告过滤黑名单使用
+- 记得备份原 DNS 配置
+- 确保端口 53 没有被其他服务占用
+- 可以和 Unbound 或 AdGuard Home 配合使用
