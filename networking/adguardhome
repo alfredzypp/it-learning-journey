@@ -1,0 +1,624 @@
+# AdGuard Home 设置指南
+
+## 什么是 AdGuard Home？
+
+AdGuard Home 是一个网络级广告和跟踪器拦截 DNS 服务器，带 Web 管理界面。
+
+## 特点
+
+- Web 管理界面
+- 广告和跟踪器拦截
+- 家长控制
+- 强制安全搜索
+- 查询日志和统计
+- 支持 DNS-over-HTTPS、DNS-over-TLS
+- DHCP 服务器
+
+## 安装 AdGuard Home
+
+### 方法1：官方安装脚本
+```bash
+# 下载并运行安装脚本
+curl -s -S -L https://raw.githubusercontent.com/AdguardTeam/AdGuardHome/master/scripts/install.sh | sh -s -- -v
+
+# 脚本会自动：
+# - 下载最新版本
+# - 安装到 /opt/AdGuardHome
+# - 创建 systemd 服务
+# - 启动服务
+```
+
+### 方法2：手动安装
+```bash
+# 下载最新版本
+cd /tmp
+wget https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_amd64.tar.gz
+
+# 解压
+tar -xvf AdGuardHome_linux_amd64.tar.gz
+
+# 移动到系统目录
+sudo mv AdGuardHome /opt/
+
+# 进入目录
+cd /opt/AdGuardHome
+
+# 安装服务
+sudo ./AdGuardHome -s install
+
+# 启动服务
+sudo ./AdGuardHome -s start
+```
+
+## 首次配置
+
+### 访问 Web 界面
+```
+打开浏览器访问：http://YOUR_SERVER_IP:3000
+```
+
+### 初始设置向导
+1. **管理界面设置**
+   - 监听接口：选择 "All interfaces" 或特定 IP
+   - 端口：默认 80（可改为 3000 或其他）
+
+2. **DNS 服务器设置**
+   - 监听接口：选择 "All interfaces"
+   - 端口：53
+
+3. **创建管理员账号**
+   - 用户名：admin
+   - 密码：设置强密码
+
+4. **完成设置**
+
+## 基本配置
+
+### 访问管理界面
+```
+http://YOUR_SERVER_IP:80
+或
+http://YOUR_SERVER_IP:3000
+```
+
+### DNS 设置
+
+#### 上游 DNS 服务器
+在 设置 → DNS 设置 → 上游 DNS 服务器：
+```
+# Cloudflare
+https://dns.cloudflare.com/dns-query
+1.1.1.1
+1.0.0.1
+
+# Google
+https://dns.google/dns-query
+8.8.8.8
+8.8.4.4
+
+# Quad9
+https://dns.quad9.net/dns-query
+9.9.9.9
+
+# AdGuard DNS
+https://dns.adguard.com/dns-query
+
+# 使用 DNSCrypt-Proxy
+127.0.0.1:5353
+```
+
+#### 备用 DNS
+```
+1.1.1.1
+8.8.8.8
+```
+
+#### DNS 服务器配置
+- ✅ 启用 DNSSEC
+- ✅ 启用 EDNS 客户端子网
+- ✅ 禁用 IPv6（如果不用）
+- ✅ 启用并行查询
+
+### 过滤器设置
+
+#### 添加过滤列表
+在 过滤器 → DNS 拦截列表 → 添加拦截列表：
+
+**推荐列表：**
+```
+AdGuard DNS filter
+https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt
+
+AdAway
+https://adaway.org/hosts.txt
+
+Steven Black's list
+https://raw.githubusercontent.com/StevenBlack/hosts/master/hosts
+
+EasyList
+https://easylist.to/easylist/easylist.txt
+
+Peter Lowe's List
+https://pgl.yoyo.org/adservers/serverlist.php?hostformat=adblockplus&showintro=0
+
+Anti-AD (中文)
+https://anti-ad.net/easylist.txt
+```
+
+#### 自定义过滤规则
+```
+# 阻止特定域名
+||example.com^
+
+# 阻止子域名
+||*.example.com^
+
+# 允许特定域名（白名单）
+@@||example.com^
+
+# 阻止特定IP
+||192.168.1.100^
+
+# 注释
+! 这是注释
+```
+
+### 客户端设置
+
+#### 添加客户端
+在 设置 → 客户端设置：
+```
+名称：家里的电脑
+识别方式：
+- IP 地址：192.168.1.100
+- MAC 地址：xx:xx:xx:xx:xx:xx
+- 客户端 ID（可选）
+
+标签：
+- 禁用过滤（如需要）
+- 使用全局设置
+- 阻止成人内容
+```
+
+## 高级功能
+
+### DNS-over-HTTPS (DoH) 设置
+
+在 设置 → 加密设置：
+
+#### 获取 SSL 证书
+```bash
+# 使用 Let's Encrypt（需要域名）
+sudo certbot certonly --standalone -d dns.yourdomain.com
+
+# 证书路径：
+/etc/letsencrypt/live/dns.yourdomain.com/fullchain.pem
+/etc/letsencrypt/live/dns.yourdomain.com/privkey.pem
+```
+
+#### 配置 DoH
+- 服务器名称：dns.yourdomain.com
+- 证书链：/etc/letsencrypt/live/dns.yourdomain.com/fullchain.pem
+- 私钥：/etc/letsencrypt/live/dns.yourdomain.com/privkey.pem
+- 端口：443
+
+客户端使用：
+```
+https://dns.yourdomain.com/dns-query
+```
+
+### DHCP 服务器
+
+在 设置 → DHCP 设置：
+```
+启用 DHCP 服务器：✅
+接口：eth0
+IPv4 设置：
+- 网关：192.168.1.1
+- 子网掩码：255.255.255.0
+- IP 范围：
+  - 起始：192.168.1.100
+  - 结束：192.168.1.200
+- 租期：86400（24小时）
+
+静态租约：
+- MAC：xx:xx:xx:xx:xx:xx
+- IP：192.168.1.50
+- 主机名：server
+```
+
+### 家长控制
+
+在 设置 → 常规设置 → 家长控制：
+```
+- 使用 AdGuard 浏览安全
+- 使用 AdGuard 家长控制
+- 强制使用安全搜索（Google、Bing、YouTube）
+```
+
+### 查询日志
+
+在 查询日志：
+```
+- 查看所有 DNS 查询
+- 按客户端过滤
+- 按类型过滤（已拦截、已允许）
+- 添加到黑/白名单
+- 下载日志
+
+日志保留时间：设置 → 常规设置 → 查询日志保留时间
+```
+
+## 配置文件
+
+### 配置文件位置
+```bash
+/opt/AdGuardHome/AdGuardHome.yaml
+```
+
+### 备份配置
+```bash
+# 备份
+sudo cp /opt/AdGuardHome/AdGuardHome.yaml /opt/AdGuardHome/AdGuardHome.yaml.backup
+
+# 或通过 Web 界面：
+# 设置 → 常规设置 → 导出设置
+```
+
+### 示例配置文件
+```yaml
+bind_host: 0.0.0.0
+bind_port: 80
+users:
+  - name: admin
+    password: $2a$10$...
+auth_attempts: 5
+block_auth_min: 15
+http_proxy: ""
+language: zh-cn
+rlimit_nofile: 0
+web_session_ttl: 720
+dns:
+  bind_hosts:
+    - 0.0.0.0
+  port: 53
+  statistics_interval: 90
+  querylog_enabled: true
+  querylog_file_enabled: true
+  querylog_interval: 90
+  querylog_size_memory: 1000
+  anonymize_client_ip: false
+  protection_enabled: true
+  blocking_mode: default
+  blocking_ipv4: ""
+  blocking_ipv6: ""
+  blocked_response_ttl: 10
+  parental_block_host: family-block.dns.adguard.com
+  safebrowsing_block_host: standard-block.dns.adguard.com
+  ratelimit: 20
+  ratelimit_whitelist: []
+  refuse_any: true
+  upstream_dns:
+    - https://dns.cloudflare.com/dns-query
+    - https://dns.google/dns-query
+  upstream_dns_file: ""
+  bootstrap_dns:
+    - 1.1.1.1
+    - 1.0.0.1
+  all_servers: false
+  fastest_addr: false
+  allowed_clients: []
+  disallowed_clients: []
+  blocked_hosts:
+    - version.bind
+    - id.server
+    - hostname.bind
+  cache_size: 4194304
+  cache_ttl_min: 0
+  cache_ttl_max: 0
+  bogus_nxdomain: []
+  aaaa_disabled: false
+  enable_dnssec: true
+  edns_client_subnet: true
+  max_goroutines: 300
+  ipset: []
+  filtering_enabled: true
+  filters_update_interval: 24
+  parental_enabled: false
+  safesearch_enabled: false
+  safebrowsing_enabled: false
+  safebrowsing_cache_size: 1048576
+  safesearch_cache_size: 1048576
+  parental_cache_size: 1048576
+  cache_time: 30
+  rewrites: []
+  blocked_services: []
+  local_domain_name: lan
+  resolve_clients: true
+  local_ptr_upstreams: []
+tls:
+  enabled: false
+  server_name: ""
+  force_https: false
+  port_https: 443
+  port_dns_over_tls: 853
+  allow_unencrypted_doh: false
+  strict_sni_check: false
+  certificate_chain: ""
+  private_key: ""
+  certificate_path: ""
+  private_key_path: ""
+filters:
+  - enabled: true
+    url: https://adguardteam.github.io/AdGuardSDNSFilter/Filters/filter.txt
+    name: AdGuard DNS filter
+    id: 1
+  - enabled: true
+    url: https://adaway.org/hosts.txt
+    name: AdAway
+    id: 2
+whitelist_filters: []
+user_rules: []
+dhcp:
+  enabled: false
+  interface_name: ""
+  dhcpv4:
+    gateway_ip: ""
+    subnet_mask: ""
+    range_start: ""
+    range_end: ""
+    lease_duration: 86400
+    icmp_timeout_msec: 1000
+    options: []
+  dhcpv6:
+    range_start: ""
+    lease_duration: 86400
+    ra_slaac_only: false
+    ra_allow_slaac: false
+clients: []
+log_compress: false
+log_localtime: false
+log_max_backups: 0
+log_max_size: 100
+log_max_age: 3
+log_file: ""
+verbose: false
+schema_version: 10
+```
+
+## 命令行管理
+```bash
+# 查看状态
+sudo /opt/AdGuardHome/AdGuardHome -s status
+
+# 启动
+sudo /opt/AdGuardHome/AdGuardHome -s start
+
+# 停止
+sudo /opt/AdGuardHome/AdGuardHome -s stop
+
+# 重启
+sudo /opt/AdGuardHome/AdGuardHome -s restart
+
+# 重新加载配置
+sudo /opt/AdGuardHome/AdGuardHome -s reload
+
+# 查看版本
+/opt/AdGuardHome/AdGuardHome --version
+
+# 更新
+sudo /opt/AdGuardHome/AdGuardHome -s stop
+cd /opt/AdGuardHome
+sudo ./AdGuardHome --update
+sudo /opt/AdGuardHome/AdGuardHome -s start
+```
+
+## 配置客户端使用 AdGuard Home
+
+### Windows
+```
+控制面板 → 网络和共享中心 → 更改适配器设置
+→ 右键你的网络连接 → 属性
+→ Internet 协议版本 4 (TCP/IPv4) → 属性
+→ 使用下面的 DNS 服务器地址：
+   首选：YOUR_SERVER_IP
+   备用：1.1.1.1
+```
+
+### Linux
+```bash
+# 使用 nmcli
+sudo nmcli connection modify "连接名" ipv4.dns "YOUR_SERVER_IP"
+sudo nmcli connection modify "连接名" ipv4.ignore-auto-dns yes
+sudo nmcli connection down "连接名"
+sudo nmcli connection up "连接名"
+
+# 或编辑 resolv.conf
+echo "nameserver YOUR_SERVER_IP" | sudo tee /etc/resolv.conf
+```
+
+### 路由器
+```
+登录路由器管理界面
+→ WAN 设置 或 Internet 设置
+→ DNS 服务器
+→ 主 DNS：YOUR_SERVER_IP
+→ 次 DNS：1.1.1.1
+```
+
+### Android
+```
+设置 → 网络和互联网 → Wi-Fi
+→ 长按你的网络 → 修改网络
+→ 高级选项 → IP 设置：静态
+→ DNS 1：YOUR_SERVER_IP
+→ DNS 2：1.1.1.1
+```
+
+### iOS
+```
+设置 → Wi-Fi
+→ 点击你的网络旁的 (i)
+→ 配置 DNS → 手动
+→ 添加服务器：YOUR_SERVER_IP
+```
+
+## 测试 AdGuard Home
+```bash
+# DNS 查询测试
+dig @YOUR_SERVER_IP google.com
+nslookup google.com YOUR_SERVER_IP
+
+# 测试广告拦截
+dig @YOUR_SERVER_IP doubleclick.net
+# 应该返回 0.0.0.0 或被拦截
+
+# Web 测试
+# 访问：https://adblock-tester.com/
+```
+
+## 与其他服务配合
+
+### 配合 DNSCrypt-Proxy
+```yaml
+# AdGuard Home 上游 DNS 设置：
+127.0.0.1:5353
+
+# DNSCrypt 监听：
+listen_addresses = ['127.0.0.1:5353']
+```
+
+### 配合 Unbound
+```yaml
+# AdGuard Home 上游 DNS：
+127.0.0.1:5335
+
+# Unbound 监听：
+port: 5335
+interface: 127.0.0.1
+```
+
+## 防火墙配置
+```bash
+# 允许 Web 界面
+sudo firewall-cmd --add-port=80/tcp --permanent
+sudo firewall-cmd --add-port=3000/tcp --permanent
+
+# 允许 DNS
+sudo firewall-cmd --add-service=dns --permanent
+
+# 允许 DoH/DoT
+sudo firewall-cmd --add-port=443/tcp --permanent
+sudo firewall-cmd --add-port=853/tcp --permanent
+
+# 允许 DHCP（如果启用）
+sudo firewall-cmd --add-service=dhcp --permanent
+
+# 重载
+sudo firewall-cmd --reload
+```
+
+## 性能优化
+
+### 在 AdGuard Home 配置中：
+```yaml
+dns:
+  cache_size: 8388608  # 增加缓存（8MB）
+  cache_ttl_min: 300
+  cache_ttl_max: 86400
+  upstream_dns:
+    - https://dns.cloudflare.com/dns-query  # 使用 DoH
+  all_servers: false  # 不并行查询所有上游
+  fastest_addr: true  # 选择最快的IP
+```
+
+## 故障排查
+```bash
+# 查看日志
+sudo journalctl -u AdGuardHome -f
+
+# 或查看文件日志（如果配置了）
+sudo tail -f /opt/AdGuardHome/data/querylog.json
+
+# 检查端口占用
+sudo ss -tulpn | grep :53
+sudo ss -tulpn | grep :80
+
+# 如果端口被占用
+sudo systemctl stop systemd-resolved
+sudo systemctl stop apache2  # 或 nginx
+
+# 重置配置
+sudo /opt/AdGuardHome/AdGuardHome -s stop
+sudo rm /opt/AdGuardHome/AdGuardHome.yaml
+sudo /opt/AdGuardHome/AdGuardHome -s start
+# 重新运行初始设置
+```
+
+## 更新 AdGuard Home
+```bash
+# 方法1：Web 界面
+# 设置 → 更新 AdGuard Home
+
+# 方法2：命令行
+sudo /opt/AdGuardHome/AdGuardHome -s stop
+cd /opt/AdGuardHome
+sudo ./AdGuardHome --update
+sudo /opt/AdGuardHome/AdGuardHome -s start
+
+# 方法3：重新运行安装脚本
+curl -s -S -L https://raw.githubusercontent.com/AdguardTeam/AdGuardHome/master/scripts/install.sh | sh -s -- -v
+```
+
+## 卸载
+```bash
+# 停止服务
+sudo /opt/AdGuardHome/AdGuardHome -s stop
+sudo /opt/AdGuardHome/AdGuardHome -s uninstall
+
+# 删除文件
+sudo rm -rf /opt/AdGuardHome
+
+# 恢复 DNS 设置
+echo "nameserver 1.1.1.1" | sudo tee /etc/resolv.conf
+```
+
+## API 使用
+```bash
+# 获取统计信息
+curl -s http://YOUR_SERVER_IP:80/control/stats | jq
+
+# 获取查询日志
+curl -s http://YOUR_SERVER_IP:80/control/querylog | jq
+
+# 添加过滤规则（需要认证）
+curl -X POST http://admin:password@YOUR_SERVER_IP:80/control/filtering/add_url \
+  -H "Content-Type: application/json" \
+  -d '{"name":"My Filter","url":"https://example.com/filter.txt","enabled":true}'
+```
+
+## 推荐的完整配置流程
+```
+1. 安装 DNSCrypt-Proxy（监听 5353）
+2. 安装 Unbound（监听 5335，转发到 DNSCrypt）
+3. 安装 AdGuard Home（监听 53，转发到 Unbound）
+4. 配置系统和设备使用 AdGuard Home
+
+流程：
+客户端 → AdGuard Home (广告过滤)
+        → Unbound (缓存)
+        → DNSCrypt-Proxy (加密)
+        → 上游 DNS
+```
+
+## 笔记
+
+- AdGuard Home 提供友好的 Web 界面
+- 适合家庭网络使用
+- 支持多种DNS协议（DoH、DoT、DNSCrypt）
+- 可以替代 Pi-hole
+- 占用资源少
+- 支持 DHCP 服务器
+- 定期更新过滤列表
+- 建议启用 DNSSEC
+- 查看统计面板了解拦截效果
