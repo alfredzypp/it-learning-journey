@@ -1,0 +1,628 @@
+# 网络故障排查指南 (Network Troubleshooting)
+
+## 基本排查流程
+```
+1. 检查物理连接
+2. 检查网络接口状态
+3. 检查 IP 配置
+4. 测试本地连接
+5. 测试网关连接
+6. 测试 DNS 解析
+7. 测试外网连接
+8. 检查防火墙规则
+9. 检查路由表
+10. 抓包分析
+```
+
+## 第一步：检查物理连接
+```bash
+# 检查网卡是否被识别
+ip link show
+# 或
+ifconfig -a
+
+# 检查网卡状态（UP 或 DOWN）
+ip link show eth0
+
+# 启用网卡
+sudo ip link set eth0 up
+
+# 禁用网卡
+sudo ip link set eth0 down
+
+# 检查网线是否插好（查看 LOWER_UP 状态）
+ip link | grep -A1 eth0
+
+# 查看网卡驱动信息
+ethtool eth0
+
+# 查看网线连接速度
+ethtool eth0 | grep Speed
+
+# 查看网卡统计信息（查找错误）
+ip -s link show eth0
+# 或
+ifconfig eth0
+```
+
+## 第二步：检查 IP 配置
+```bash
+# 查看所有网络接口的 IP
+ip addr show
+# 或
+ifconfig
+
+# 查看特定接口
+ip addr show eth0
+
+# 查看 IPv4 地址
+ip -4 addr
+
+# 查看 IPv6 地址
+ip -6 addr
+
+# 手动配置 IP（临时）
+sudo ip addr add 192.168.1.100/24 dev eth0
+
+# 删除 IP
+sudo ip addr del 192.168.1.100/24 dev eth0
+
+# 查看 DHCP 租约
+sudo dhclient -v
+
+# 重新获取 DHCP IP
+sudo dhclient -r eth0  # 释放
+sudo dhclient eth0     # 重新获取
+```
+
+## 第三步：测试连通性 (Ping)
+```bash
+# Ping 本机回环地址（测试 TCP/IP 栈）
+ping 127.0.0.1
+ping localhost
+
+# Ping 本机 IP（测试网卡）
+ping 192.168.1.100
+
+# Ping 同网段其他主机
+ping 192.168.1.1
+
+# Ping 网关
+ping $(ip route | grep default | awk '{print $3}')
+
+# Ping 外网 IP（测试路由）
+ping 8.8.8.8
+ping 1.1.1.1
+
+# Ping 域名（测试 DNS）
+ping google.com
+
+# 持续 ping
+ping -c 10 google.com        # ping 10 次
+ping -i 2 google.com          # 每 2 秒 ping 一次
+ping -w 10 google.com         # 10 秒后停止
+
+# 设置包大小
+ping -s 1000 google.com       # 发送 1000 字节的包
+
+# 快速 ping（flood ping，需要 root）
+sudo ping -f 192.168.1.1
+
+# IPv6 ping
+ping6 google.com
+```
+
+## 第四步：检查路由
+```bash
+# 查看路由表
+ip route show
+# 或
+route -n
+# 或
+netstat -rn
+
+# 查看默认网关
+ip route | grep default
+
+# 查看到特定目标的路由
+ip route get 8.8.8.8
+
+# 添加静态路由
+sudo ip route add 192.168.2.0/24 via 192.168.1.1
+
+# 删除路由
+sudo ip route del 192.168.2.0/24
+
+# 添加默认网关
+sudo ip route add default via 192.168.1.1
+
+# 查看路由缓存
+ip route show cache
+
+# Traceroute（跟踪路由路径）
+traceroute google.com
+# 或使用 mtr（更好的工具）
+mtr google.com
+
+# IPv6 traceroute
+traceroute6 google.com
+```
+
+## 第五步：DNS 故障排查
+```bash
+# 查看当前 DNS 设置
+cat /etc/resolv.conf
+
+# 使用 nslookup 测试 DNS
+nslookup google.com
+
+# 指定 DNS 服务器测试
+nslookup google.com 8.8.8.8
+
+# 使用 dig 测试（更详细）
+dig google.com
+
+# 查看完整 DNS 解析过程
+dig +trace google.com
+
+# 只显示 IP 地址
+dig +short google.com
+
+# 反向 DNS 查询
+dig -x 8.8.8.8
+
+# 查询特定记录类型
+dig google.com A      # IPv4 地址
+dig google.com AAAA   # IPv6 地址
+dig google.com MX     # 邮件服务器
+dig google.com NS     # 域名服务器
+dig google.com TXT    # 文本记录
+
+# 使用 host 命令
+host google.com
+host 8.8.8.8
+
+# 清除 DNS 缓存
+sudo systemd-resolve --flush-caches
+# 或
+sudo systemctl restart systemd-resolved
+# 或
+sudo /etc/init.d/nscd restart
+
+# 查看 DNS 缓存统计
+sudo systemd-resolve --statistics
+```
+
+## 第六步：端口和服务检查
+```bash
+# 查看所有监听端口
+sudo ss -tulpn
+# 或
+sudo netstat -tulpn
+
+# 查看所有 TCP 连接
+ss -tan
+
+# 查看所有 UDP 连接
+ss -uan
+
+# 查看特定端口
+sudo ss -tulpn | grep :80
+sudo netstat -tulpn | grep :22
+
+# 查看进程占用的端口
+sudo lsof -i :80
+sudo lsof -i tcp:22
+
+# 查看所有网络连接的进程
+sudo lsof -i
+
+# 测试端口是否开放（从本地）
+nc -zv localhost 80
+telnet localhost 22
+
+# 测试远程端口
+nc -zv google.com 80
+telnet google.com 443
+
+# 查看当前连接数
+ss -s
+
+# 查看建立的连接
+ss -tan state established
+```
+
+## 第七步：防火墙检查
+```bash
+# 查看 firewalld 状态
+sudo firewall-cmd --state
+sudo firewall-cmd --list-all
+
+# 临时关闭防火墙（测试用）
+sudo systemctl stop firewalld
+
+# 查看 iptables 规则
+sudo iptables -L -n -v
+
+# 查看 NAT 表
+sudo iptables -t nat -L -n -v
+
+# 清空所有防火墙规则（危险！）
+sudo iptables -F
+
+# 查看被阻止的连接
+sudo journalctl -k | grep -i reject
+sudo journalctl -k | grep -i drop
+```
+
+## 第八步：抓包分析
+```bash
+# 使用 tcpdump 抓包
+sudo tcpdump -i eth0
+
+# 抓取特定主机的包
+sudo tcpdump -i eth0 host 192.168.1.1
+
+# 抓取特定端口的包
+sudo tcpdump -i eth0 port 80
+
+# 抓取 HTTP 流量
+sudo tcpdump -i eth0 port 80 -A
+
+# 保存到文件
+sudo tcpdump -i eth0 -w capture.pcap
+
+# 读取抓包文件
+tcpdump -r capture.pcap
+
+# 只抓取 100 个包
+sudo tcpdump -i eth0 -c 100
+
+# 详细显示（十六进制 + ASCII）
+sudo tcpdump -i eth0 -XX
+
+# 抓取 ICMP 包（ping）
+sudo tcpdump -i eth0 icmp
+
+# 抓取 DNS 查询
+sudo tcpdump -i eth0 port 53
+
+# 组合条件
+sudo tcpdump -i eth0 'host 192.168.1.1 and port 80'
+```
+
+## 常见问题场景排查
+
+### 场景1：完全无法上网
+```bash
+# 步骤1：检查网卡状态
+ip link show
+
+# 步骤2：检查 IP 配置
+ip addr show
+
+# 步骤3：Ping 网关
+ping $(ip route | grep default | awk '{print $3}')
+
+# 步骤4：检查 DNS
+cat /etc/resolv.conf
+
+# 步骤5：Ping 外网 IP
+ping 8.8.8.8
+
+# 步骤6：Ping 域名
+ping google.com
+```
+
+**可能原因：**
+- 网线未插好 → 检查物理连接
+- 网卡未启用 → `sudo ip link set eth0 up`
+- 没有 IP → `sudo dhclient eth0`
+- 网关错误 → 检查路由表
+- DNS 问题 → 修改 `/etc/resolv.conf`
+- 防火墙阻挡 → 检查防火墙规则
+
+### 场景2：能 Ping 通 IP 但无法访问域名
+```bash
+# 测试
+ping 8.8.8.8        # 成功
+ping google.com     # 失败
+
+# 原因：DNS 问题
+# 解决：
+echo "nameserver 8.8.8.8" | sudo tee /etc/resolv.conf
+```
+
+### 场景3：本地网络正常但无法访问外网
+```bash
+# 测试
+ping 192.168.1.1    # 成功（网关）
+ping 8.8.8.8        # 失败（外网）
+
+# 检查默认路由
+ip route show
+
+# 原因：没有默认网关或网关配置错误
+# 解决：
+sudo ip route add default via 192.168.1.1
+```
+
+### 场景4：网速很慢
+```bash
+# 检查网卡速度
+ethtool eth0 | grep Speed
+
+# 检查丢包率
+ping -c 100 8.8.8.8 | grep loss
+
+# 查看网卡错误
+ip -s link show eth0
+
+# 检查网络拥塞
+mtr google.com
+
+# 测速
+speedtest-cli
+# 或
+fast
+```
+
+### 场景5：间歇性断网
+```bash
+# 持续监控连接
+ping -i 1 8.8.8.8 | while read line; do echo "$(date): $line"; done
+
+# 查看系统日志
+sudo journalctl -f | grep -i network
+
+# 查看 NetworkManager 日志
+sudo journalctl -u NetworkManager -f
+
+# 检查网卡驱动错误
+dmesg | grep -i eth0
+dmesg | grep -i error
+```
+
+### 场景6：特定端口无法访问
+```bash
+# 测试端口
+nc -zv example.com 80
+
+# 检查防火墙
+sudo firewall-cmd --list-ports
+
+# 检查本地监听
+sudo ss -tulpn | grep :80
+
+# 抓包查看
+sudo tcpdump -i eth0 port 80
+```
+
+## 网络性能测试
+```bash
+# 测试网速
+speedtest-cli
+
+# 测试带宽（需要两台机器）
+# 服务器端：
+iperf3 -s
+
+# 客户端：
+iperf3 -c server_ip
+
+# 测试 UDP 带宽
+iperf3 -c server_ip -u
+
+# 测试延迟和抖动
+mtr --report google.com
+
+# 查看实时带宽使用
+iftop
+# 或
+nload
+# 或
+vnstat
+```
+
+## 高级诊断工具
+```bash
+# ss - 更现代的 netstat
+ss -tulpn              # 监听端口
+ss -tan                # 所有 TCP 连接
+ss -tan state established  # 已建立的连接
+
+# ip 命令全集
+ip addr                # IP 地址
+ip link                # 网络接口
+ip route               # 路由表
+ip neigh               # ARP 表
+
+# ethtool - 网卡详细信息
+ethtool eth0
+ethtool -S eth0        # 统计信息
+ethtool -i eth0        # 驱动信息
+
+# nmcli - NetworkManager 命令行
+nmcli device status
+nmcli connection show
+nmcli connection up "连接名"
+nmcli connection down "连接名"
+
+# arp - 查看 MAC 地址表
+arp -a
+ip neigh show
+```
+
+## 常用诊断命令速查表
+
+| 问题 | 命令 |
+|------|------|
+| 检查网卡状态 | `ip link show` |
+| 检查 IP 配置 | `ip addr show` |
+| 测试连通性 | `ping 8.8.8.8` |
+| 查看路由 | `ip route show` |
+| 测试 DNS | `nslookup google.com` |
+| 查看监听端口 | `sudo ss -tulpn` |
+| 跟踪路由 | `mtr google.com` |
+| 抓包 | `sudo tcpdump -i eth0` |
+| 测试端口 | `nc -zv host port` |
+| 查看连接 | `ss -tan` |
+| 重启网络 | `sudo systemctl restart NetworkManager` |
+| 刷新 DNS | `sudo systemd-resolve --flush-caches` |
+
+## 创建诊断脚本
+
+### 快速网络诊断脚本
+```bash
+#!/bin/bash
+# network-diag.sh - 快速网络诊断
+
+echo "========== 网络诊断工具 =========="
+echo ""
+
+echo "1. 网卡状态："
+ip link show | grep -E "^[0-9]|state"
+echo ""
+
+echo "2. IP 配置："
+ip -4 addr show | grep -E "inet |^[0-9]"
+echo ""
+
+echo "3. 默认网关："
+ip route | grep default
+echo ""
+
+echo "4. DNS 配置："
+cat /etc/resolv.conf | grep nameserver
+echo ""
+
+echo "5. 测试本地连接："
+ping -c 3 127.0.0.1 > /dev/null 2>&1 && echo "✓ 本地回环正常" || echo "✗ 本地回环失败"
+echo ""
+
+echo "6. 测试网关连接："
+GATEWAY=$(ip route | grep default | awk '{print $3}')
+if [ -n "$GATEWAY" ]; then
+    ping -c 3 $GATEWAY > /dev/null 2>&1 && echo "✓ 网关 ($GATEWAY) 可达" || echo "✗ 网关 ($GATEWAY) 不可达"
+else
+    echo "✗ 未找到默认网关"
+fi
+echo ""
+
+echo "7. 测试外网连接："
+ping -c 3 8.8.8.8 > /dev/null 2>&1 && echo "✓ 外网 (8.8.8.8) 可达" || echo "✗ 外网 (8.8.8.8) 不可达"
+echo ""
+
+echo "8. 测试 DNS 解析："
+ping -c 3 google.com > /dev/null 2>&1 && echo "✓ DNS 解析正常" || echo "✗ DNS 解析失败"
+echo ""
+
+echo "9. 防火墙状态："
+sudo systemctl is-active firewalld > /dev/null 2>&1 && echo "防火墙运行中" || echo "防火墙已停止"
+echo ""
+
+echo "10. 监听端口："
+echo "开放的端口："
+sudo ss -tulpn | grep LISTEN | awk '{print $5}' | cut -d: -f2 | sort -u
+echo ""
+
+echo "========== 诊断完成 =========="
+```
+
+保存并运行：
+```bash
+chmod +x network-diag.sh
+./network-diag.sh
+```
+
+### 连接监控脚本
+```bash
+#!/bin/bash
+# connection-monitor.sh - 监控网络连接
+
+LOG_FILE="connection.log"
+
+echo "开始监控网络连接... (Ctrl+C 停止)"
+echo "日志保存在: $LOG_FILE"
+
+while true; do
+    TIMESTAMP=$(date '+%Y-%m-%d %H:%M:%S')
+    
+    # Ping 测试
+    if ping -c 1 -W 2 8.8.8.8 > /dev/null 2>&1; then
+        echo "$TIMESTAMP - OK" | tee -a $LOG_FILE
+    else
+        echo "$TIMESTAMP - FAILED!" | tee -a $LOG_FILE
+        
+        # 连接失败时记录详细信息
+        echo "--- 诊断信息 ---" >> $LOG_FILE
+        ip addr show >> $LOG_FILE
+        ip route show >> $LOG_FILE
+        echo "---------------" >> $LOG_FILE
+    fi
+    
+    sleep 5
+done
+```
+
+## 有用的别名（添加到 ~/.bashrc）
+```bash
+# 网络诊断别名
+alias myip='ip addr show | grep "inet " | grep -v 127.0.0.1'
+alias ports='sudo ss -tulpn'
+alias connections='ss -tan'
+alias gateway='ip route | grep default'
+alias publicip='curl -s ifconfig.me'
+alias pingg='ping google.com'
+alias pingd='ping 8.8.8.8'
+alias flushdns='sudo systemd-resolve --flush-caches'
+alias netrestart='sudo systemctl restart NetworkManager'
+```
+
+使用方法：
+```bash
+source ~/.bashrc
+myip
+ports
+```
+
+## 重要日志位置
+```bash
+# 系统日志
+/var/log/messages
+/var/log/syslog
+
+# NetworkManager 日志
+sudo journalctl -u NetworkManager
+
+# 内核日志
+dmesg | grep -i network
+
+# 防火墙日志
+sudo journalctl -u firewalld
+
+# 查看实时日志
+sudo tail -f /var/log/messages
+sudo journalctl -f
+```
+
+## 笔记
+
+- 排查网络问题要从下往上：物理层 → 数据链路层 → 网络层 → 传输层 → 应用层
+- 使用 `ip` 命令代替老旧的 `ifconfig` 和 `route`
+- `ss` 比 `netstat` 更快更现代
+- `mtr` 结合了 `ping` 和 `traceroute` 的优点
+- 抓包分析用 `tcpdump` + Wireshark（图形界面）
+- 修改网络配置前先备份
+- 生产环境操作要谨慎，最好有备用连接方式
+
+## 常见错误代码
+
+| 错误 | 含义 |
+|------|------|
+| Network is unreachable | 没有到目标的路由 |
+| No route to host | 路由存在但主机不可达 |
+| Connection refused | 端口未开放或服务未运行 |
+| Connection timed out | 防火墙阻挡或网络问题 |
+| Name or service not known | DNS 解析失败 |
+| Destination Host Unreachable | 网关无法到达目标 |
