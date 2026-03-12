@@ -1,0 +1,169 @@
+# DNS 命令行设置指南 (openSUSE/Linux)
+
+## 查看当前 DNS 设置
+```bash
+# 查看 resolv.conf
+cat /etc/resolv.conf
+
+# 查看 systemd-resolved 状态
+systemd-resolve --status
+
+# 查看网络配置
+nmcli dev show | grep DNS
+```
+
+## 临时更改 DNS（重启后失效）
+```bash
+# 直接编辑 resolv.conf
+sudo nano /etc/resolv.conf
+```
+
+添加：
+```
+nameserver 1.1.1.1
+nameserver 1.0.0.1
+```
+
+## 永久更改 DNS (openSUSE 推荐方法)
+
+### 方法1: 使用 netconfig
+```bash
+# 编辑网络配置文件
+sudo nano /etc/sysconfig/network/config
+```
+
+找到并修改这一行：
+```
+NETCONFIG_DNS_STATIC_SERVERS="1.1.1.1 1.0.0.1 8.8.8.8"
+```
+
+应用设置：
+```bash
+sudo netconfig update -f
+```
+
+验证：
+```bash
+cat /etc/resolv.conf
+```
+
+### 方法2: 使用 nmcli (NetworkManager)
+```bash
+# 查看所有连接
+nmcli connection show
+
+# 设置 DNS（把 "Wired connection 1" 换成你的连接名）
+sudo nmcli connection modify "Wired connection 1" ipv4.dns "1.1.1.1 1.0.0.1"
+
+# 重启连接使其生效
+sudo nmcli connection down "Wired connection 1"
+sudo nmcli connection up "Wired connection 1"
+
+# 或者直接重启 NetworkManager
+sudo systemctl restart NetworkManager
+```
+
+### 方法3: 编辑网络接口配置文件
+```bash
+# 查看网络接口名称
+ip addr
+
+# 编辑接口配置（假设接口是 eth0）
+sudo nano /etc/sysconfig/network/ifcfg-eth0
+```
+
+添加或修改：
+```
+DNS1=1.1.1.1
+DNS2=1.0.0.1
+```
+
+重启网络：
+```bash
+sudo systemctl restart network
+```
+
+## 测试 DNS
+```bash
+# 使用 nslookup
+nslookup google.com
+
+# 使用 dig (更详细)
+dig google.com
+
+# 使用 host
+host google.com
+
+# 测试特定 DNS 服务器
+dig @1.1.1.1 google.com
+dig @8.8.8.8 google.com
+
+# 比较响应时间
+time dig @1.1.1.1 google.com
+time dig @8.8.8.8 google.com
+```
+
+## 清除 DNS 缓存
+```bash
+# systemd-resolved
+sudo systemd-resolve --flush-caches
+
+# nscd 服务
+sudo systemctl restart nscd
+
+# NetworkManager
+sudo systemctl restart NetworkManager
+
+# 或者全部重启
+sudo systemctl restart systemd-resolved nscd NetworkManager
+```
+
+## 排查问题
+```bash
+# 检查 DNS 解析过程
+dig +trace google.com
+
+# 查看 DNS 查询日志
+journalctl -u systemd-resolved -f
+
+# 检查网络服务状态
+sudo systemctl status NetworkManager
+sudo systemctl status systemd-resolved
+
+# Ping DNS 服务器测试连通性
+ping -c 4 1.1.1.1
+ping -c 4 8.8.8.8
+
+# 查看路由表
+ip route show
+```
+
+## 常用 DNS 服务器
+
+| 提供商 | 主DNS | 备DNS | 命令设置示例 |
+|--------|-------|-------|-------------|
+| Cloudflare | 1.1.1.1 | 1.0.0.1 | `sudo nmcli con mod "连接名" ipv4.dns "1.1.1.1 1.0.0.1"` |
+| Google | 8.8.8.8 | 8.8.4.4 | `sudo nmcli con mod "连接名" ipv4.dns "8.8.8.8 8.8.4.4"` |
+| Quad9 | 9.9.9.9 | 149.112.112.112 | `sudo nmcli con mod "连接名" ipv4.dns "9.9.9.9"` |
+
+## 一键脚本设置 Cloudflare DNS
+```bash
+#!/bin/bash
+# 设置 Cloudflare DNS
+CONNECTION=$(nmcli -t -f NAME connection show --active | head -n1)
+sudo nmcli connection modify "$CONNECTION" ipv4.dns "1.1.1.1 1.0.0.1"
+sudo nmcli connection down "$CONNECTION"
+sudo nmcli connection up "$CONNECTION"
+echo "DNS 已设置为 Cloudflare (1.1.1.1)"
+```
+
+保存为 `set-dns.sh`，运行：
+```bash
+chmod +x set-dns.sh
+./set-dns.sh
+```
+
+## 笔记
+- openSUSE 使用 `netconfig` 管理 DNS，直接修改 `/etc/resolv.conf` 可能会被覆盖
+- 推荐使用 `netconfig` 或 `nmcli` 方法
+- 修改后记得验证：`cat /etc/resolv.conf`
